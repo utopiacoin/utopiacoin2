@@ -1,0 +1,27 @@
+# /etc/conf.d/newcoind: config file for /etc/init.d/newcoind
+
+# Config file location
+#NEWCOIND_CONFIGFILE="/etc/newcoin/newcoin.conf"
+
+# What directory to write pidfile to?  (created and owned by $NEWCOIND_USER)
+#NEWCOIND_PIDDIR="/var/run/newcoind"
+
+# What filename to give the pidfile
+#NEWCOIND_PIDFILE="${NEWCOIND_PIDDIR}/newcoind.pid"
+
+# Where to write newcoind data (be mindful that the blockchain is large)
+#NEWCOIND_DATADIR="/var/lib/newcoind"
+
+# User and group to own newcoind process
+#NEWCOIND_USER="newcoin"
+#NEWCOIND_GROUP="newcoin"
+
+# Path to newcoind executable
+#NEWCOIND_BIN="/usr/bin/newcoind"
+
+# Nice value to run newcoind under
+#NEWCOIND_NICE=0
+
+# Additional options (avoid -conf and -datadir, use flags above)
+NEWCOIND_OPTS="-disablewallet"
+

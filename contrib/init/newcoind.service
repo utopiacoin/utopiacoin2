@@ -1,0 +1,22 @@
+[Unit]
+Description=Newcoin's distributed currency daemon
+After=network.target
+
+[Service]
+User=newcoin
+Group=newcoin
+
+Type=forking
+PIDFile=/var/lib/newcoind/newcoind.pid
+ExecStart=/usr/bin/newcoind -daemon -pid=/var/lib/newcoind/newcoind.pid \
+-conf=/etc/newcoin/newcoin.conf -datadir=/var/lib/newcoind -disablewallet
+
+Restart=always
+PrivateTmp=true
+TimeoutStopSec=60s
+TimeoutStartSec=2s
+StartLimitInterval=120s
+StartLimitBurst=5
+
+[Install]
+WantedBy=multi-user.target

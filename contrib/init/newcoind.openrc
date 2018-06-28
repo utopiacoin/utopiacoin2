@@ -1,0 +1,86 @@
+#!/sbin/runscript
+
+# backward compatibility for existing gentoo layout 
+#
+if [ -d "/var/lib/newcoin/.newcoin" ]; then
+	NEWCOIND_DEFAULT_DATADIR="/var/lib/newcoin/.newcoin"
+else
+	NEWCOIND_DEFAULT_DATADIR="/var/lib/newcoind"
+fi
+
+NEWCOIND_CONFIGFILE=${NEWCOIND_CONFIGFILE:-/etc/newcoin/newcoin.conf}
+NEWCOIND_PIDDIR=${NEWCOIND_PIDDIR:-/var/run/newcoind}
+NEWCOIND_PIDFILE=${NEWCOIND_PIDFILE:-${NEWCOIND_PIDDIR}/newcoind.pid}
+NEWCOIND_DATADIR=${NEWCOIND_DATADIR:-${NEWCOIND_DEFAULT_DATADIR}}
+NEWCOIND_USER=${NEWCOIND_USER:-newcoin}
+NEWCOIND_GROUP=${NEWCOIND_GROUP:-newcoin}
+NEWCOIND_BIN=${NEWCOIND_BIN:-/usr/bin/newcoind}
+
+name="Newcoin Core Daemon"
+description="Newcoin crypto-currency p2p network daemon"
+
+command="/usr/bin/newcoind"
+command_args="-pid=\"${NEWCOIND_PIDFILE}\" \
+		-conf=\"${NEWCOIND_CONFIGFILE}\" \
+		-datadir=\"${NEWCOIND_DATADIR}\" \
+		-daemon \
+		${NEWCOIND_OPTS}"
+
+required_files="${NEWCOIND_CONFIGFILE}"
+start_stop_daemon_args="-u ${NEWCOIND_USER} \
+			-N ${NEWCOIND_NICE:-0} -w 2000"
+pidfile="${NEWCOIND_PIDFILE}"
+retry=60
+
+depend() {
+	need localmount net
+}
+
+# verify
+# 1) that the datadir exists and is writable (or create it)
+# 2) that a directory for the pid exists and is writable
+# 3) ownership and permissions on the config file
+start_pre() {
+	checkpath \
+	-d \
+	--mode 0750 \
+	--owner "${NEWCOIND_USER}:${NEWCOIND_GROUP}" \
+	"${NEWCOIND_DATADIR}"
+
+	checkpath \
+	-d \
+	--mode 0755 \
+	--owner "${NEWCOIND_USER}:${NEWCOIND_GROUP}" \
+	"${NEWCOIND_PIDDIR}"
+
+	checkpath -f \
+	-o ${NEWCOIND_USER}:${NEWCOIND_GROUP} \
+	-m 0660 \
+	${NEWCOIND_CONFIGFILE}
+
+	checkconfig || return 1
+}
+
+checkconfig()
+{
+	if ! grep -qs '^rpcpassword=' "${NEWCOIND_CONFIGFILE}" ; then
+		eerror ""
+		eerror "ERROR: You must set a secure rpcpassword to run newcoind."
+		eerror "The setting must appear in ${NEWCOIND_CONFIGFILE}"
+		eerror ""
+		eerror "This password is security critical to securing wallets "
+		eerror "and must not be the same as the rpcuser setting."
+		eerror "You can generate a suitable random password using the following"
+		eerror "command from the shell:"
+		eerror ""
+		eerror "bash -c 'tr -dc a-zA-Z0-9 < /dev/urandom | head -c32 && echo'"
+		eerror ""
+		eerror "It is also recommended that you also set alertnotify so you are "
+		eerror "notified of problems:"
+		eerror ""
+		eerror "ie: alertnotify=echo %%s | mail -s \"Newcoin Alert\"" \
+			"admin@foo.com"
+		eerror ""
+		return 1
+	fi
+}
