@@ -2,8 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BITCOIN_BLOOM_H
-#define BITCOIN_BLOOM_H
+#ifndef NEWCOIN_BLOOM_H
+#define NEWCOIN_BLOOM_H
 
 #include "serialize.h"
 
@@ -97,4 +97,4 @@ public:
     void UpdateEmptyFull();
 };
 
-#endif // BITCOIN_BLOOM_H
+#endif // NEWCOIN_BLOOM_H
