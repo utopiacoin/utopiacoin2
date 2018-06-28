@@ -2,11 +2,11 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BITCOIN_CRYPTO_COMMON_H
-#define BITCOIN_CRYPTO_COMMON_H
+#ifndef NEWCOIN_CRYPTO_COMMON_H
+#define NEWCOIN_CRYPTO_COMMON_H
 
 #if defined(HAVE_CONFIG_H)
-#include "bitcoin-config.h"
+#include "newcoin-config.h"
 #endif
 
 #include <stdint.h>
@@ -117,4 +117,4 @@ void static inline WriteBE64(unsigned char* ptr, uint64_t x)
 #endif
 }
 
-#endif // BITCOIN_CRYPTO_COMMON_H
+#endif // NEWCOIN_CRYPTO_COMMON_H
