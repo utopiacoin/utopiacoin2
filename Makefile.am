@@ -1,200 +1,418 @@
-ACLOCAL_AMFLAGS = -I build-aux/m4
-SUBDIRS = src
-.PHONY: deploy FORCE
+DIST_SUBDIRS = secp256k1
+AM_LDFLAGS = $(PTHREAD_CFLAGS) $(LIBTOOL_LDFLAGS)
 
-GZIP_ENV="-9n"
 
-NEWCOIND_BIN=$(top_builddir)/src/newcoind$(EXEEXT)
-NEWCOIN_QT_BIN=$(top_builddir)/src/qt/newcoin-qt$(EXEEXT)
-NEWCOIN_CLI_BIN=$(top_builddir)/src/newcoin-cli$(EXEEXT)
-NEWCOIN_WIN_INSTALLER=$(PACKAGE)-$(PACKAGE_VERSION)-win$(WINDOWS_BITS)-setup$(EXEEXT)
+if EMBEDDED_LEVELDB
+LEVELDB_CPPFLAGS += -I$(srcdir)/leveldb/include
+LEVELDB_CPPFLAGS += -I$(srcdir)/leveldb/helpers/memenv
+LIBLEVELDB += $(builddir)/leveldb/libleveldb.a
+LIBMEMENV  += $(builddir)/leveldb/libmemenv.a
 
-OSX_APP=Newcoin-Qt.app
-OSX_DMG=Newcoin-Qt.dmg
-OSX_DEPLOY_SCRIPT=$(top_srcdir)/contrib/macdeploy/macdeployqtplus
-OSX_FANCY_PLIST=$(top_srcdir)/contrib/macdeploy/fancy.plist
-OSX_INSTALLER_ICONS=$(top_srcdir)/src/qt/res/icons/newcoin.icns
-OSX_PLIST=$(top_srcdir)/share/qt/Info.plist #not installed
-OSX_QT_TRANSLATIONS = da,de,es,hu,ru,uk,zh_CN,zh_TW
+# NOTE: This dependency is not strictly necessary, but without it make may try to build both in parallel, which breaks the LevelDB build system in a race
+$(LIBLEVELDB): $(LIBMEMENV)
 
-DIST_DOCS = $(wildcard doc/*.md) $(wildcard doc/release-notes/*.md)
+$(LIBLEVELDB) $(LIBMEMENV):
+	@echo "Building LevelDB ..." && $(MAKE) -C $(@D) $(@F) CXX="$(CXX)" \
+	  CC="$(CC)" PLATFORM=$(TARGET_OS) AR="$(AR)" $(LEVELDB_TARGET_FLAGS) \
+          OPT="$(CXXFLAGS) $(CPPFLAGS)"
+endif
 
-WINDOWS_PACKAGING = $(top_srcdir)/share/pixmaps/newcoin.ico \
-  $(top_srcdir)/share/pixmaps/nsis-header.bmp \
-  $(top_srcdir)/share/pixmaps/nsis-wizard.bmp \
-  $(top_srcdir)/doc/README_windows.txt
+NEWCOIN_CONFIG_INCLUDES=-I$(builddir)/config
+NEWCOIN_INCLUDES=-I$(builddir) -I$(builddir)/obj $(BOOST_CPPFLAGS) $(LEVELDB_CPPFLAGS) $(CRYPTO_CFLAGS) $(SSL_CFLAGS)
 
-OSX_PACKAGING = $(OSX_DEPLOY_SCRIPT) $(OSX_FANCY_PLIST) $(OSX_INSTALLER_ICONS) \
-  $(top_srcdir)/contrib/macdeploy/background.png \
-  $(top_srcdir)/contrib/macdeploy/DS_Store \
-  $(top_srcdir)/contrib/macdeploy/detached-sig-apply.sh \
-  $(top_srcdir)/contrib/macdeploy/detached-sig-create.sh
+NEWCOIN_INCLUDES += -I$(srcdir)/secp256k1/include
 
-COVERAGE_INFO = baseline_filtered_combined.info baseline.info block_test.info \
-  leveldb_baseline.info test_newcoin_filtered.info total_coverage.info \
-  baseline_filtered.info block_test_filtered.info \
-  leveldb_baseline_filtered.info test_newcoin_coverage.info test_newcoin.info
+LIBNEWCOIN_SERVER=libnewcoin_server.a
+LIBNEWCOIN_WALLET=libnewcoin_wallet.a
+LIBNEWCOIN_COMMON=libnewcoin_common.a
+LIBNEWCOIN_CLI=libnewcoin_cli.a
+LIBNEWCOIN_UTIL=libnewcoin_util.a
+LIBNEWCOIN_CRYPTO=crypto/libnewcoin_crypto.a
+LIBNEWCOIN_UNIVALUE=univalue/libnewcoin_univalue.a
+LIBNEWCOINQT=qt/libnewcoinqt.a
+LIBSECP256K1=secp256k1/libsecp256k1.la
 
-dist-hook:
-	-$(MAKE) -C $(top_distdir)/src/leveldb clean
-	-$(MAKE) -C $(top_distdir)/src/secp256k1 distclean
-	-$(GIT) archive --format=tar HEAD -- src/clientversion.cpp | $(AMTAR) -C $(top_distdir) -xf -
+$(LIBSECP256K1): $(wildcard secp256k1/src/*) $(wildcard secp256k1/include/*)
+	$(AM_V_at)$(MAKE) $(AM_MAKEFLAGS) -C $(@D) $(@F)
 
-distcheck-hook:
-	$(MKDIR_P) $(top_distdir)/_build/src/leveldb
-	cp -rf $(top_srcdir)/src/leveldb/* $(top_distdir)/_build/src/leveldb/
-	-$(MAKE) -C $(top_distdir)/_build/src/leveldb clean
+# Make is not made aware of per-object dependencies to avoid limiting building parallelization
+# But to build the less dependent modules first, we manually select their order here:
+EXTRA_LIBRARIES = \
+  crypto/libnewcoin_crypto.a \
+  libnewcoin_util.a \
+  libnewcoin_common.a \
+  univalue/libnewcoin_univalue.a \
+  libnewcoin_server.a \
+  libnewcoin_cli.a
+if ENABLE_WALLET
+NEWCOIN_INCLUDES += $(BDB_CPPFLAGS)
+EXTRA_LIBRARIES += libnewcoin_wallet.a
+endif
 
-distcleancheck:
-	@:
-
-$(NEWCOIN_WIN_INSTALLER): all-recursive
-	$(MKDIR_P) $(top_builddir)/release
-	STRIPPROG="$(STRIP)" $(INSTALL_STRIP_PROGRAM) $(NEWCOIND_BIN) $(top_builddir)/release
-	STRIPPROG="$(STRIP)" $(INSTALL_STRIP_PROGRAM) $(NEWCOIN_QT_BIN) $(top_builddir)/release
-	STRIPPROG="$(STRIP)" $(INSTALL_STRIP_PROGRAM) $(NEWCOIN_CLI_BIN) $(top_builddir)/release
-	@test -f $(MAKENSIS) && $(MAKENSIS) $(top_builddir)/share/setup.nsi || \
-	  echo error: could not build $@
-
-$(if $(findstring src/,$(MAKECMDGOALS)),$(MAKECMDGOALS), none): FORCE
-	$(MAKE) -C src $(patsubst src/%,%,$@)
-
-$(OSX_APP)/Contents/PkgInfo:
-	$(MKDIR_P) $(@D)
-	@echo "APPL????" > $@
-
-$(OSX_APP)/Contents/Resources/empty.lproj:
-	$(MKDIR_P) $(@D)
-	@touch $@
-
-$(OSX_APP)/Contents/Info.plist: $(OSX_PLIST)
-	$(MKDIR_P) $(@D)
-	$(INSTALL_DATA) $< $@
-
-$(OSX_APP)/Contents/Resources/newcoin.icns: $(OSX_INSTALLER_ICONS)
-	$(MKDIR_P) $(@D)
-	$(INSTALL_DATA) $< $@
-
-$(OSX_APP)/Contents/MacOS/Newcoin-Qt: $(NEWCOIN_QT_BIN)
-	$(MKDIR_P) $(@D)
-	STRIPPROG="$(STRIP)" $(INSTALL_STRIP_PROGRAM)  $< $@
-
-OSX_APP_BUILT=$(OSX_APP)/Contents/PkgInfo $(OSX_APP)/Contents/Resources/empty.lproj \
-  $(OSX_APP)/Contents/Resources/newcoin.icns $(OSX_APP)/Contents/Info.plist \
-  $(OSX_APP)/Contents/MacOS/Newcoin-Qt
-
-if BUILD_DARWIN
-$(OSX_DMG): $(OSX_APP_BUILT) $(OSX_PACKAGING)
-	$(OSX_DEPLOY_SCRIPT) $(OSX_APP) -add-qt-tr $(OSX_QT_TRANSLATIONS) -translations-dir=$(QT_TRANSLATION_DIR) -dmg -fancy $(OSX_FANCY_PLIST) -verbose 2
-
-deploydir: $(OSX_DMG)
+if BUILD_NEWCOIN_LIBS
+lib_LTLIBRARIES = libnewcoinconsensus.la
+LIBNEWCOIN_CONSENSUS=libnewcoinconsensus.la
 else
-APP_DIST_DIR=$(top_builddir)/dist
-APP_DIST_EXTRAS=$(APP_DIST_DIR)/.background/background.png $(APP_DIST_DIR)/.DS_Store $(APP_DIST_DIR)/Applications
-
-$(APP_DIST_DIR)/Applications:
-	@rm -f $@
-	@cd $(@D); $(LN_S) /Applications $(@F)
-
-$(APP_DIST_EXTRAS): $(APP_DIST_DIR)/$(OSX_APP)/Contents/MacOS/Newcoin-Qt
-
-$(OSX_DMG): $(APP_DIST_EXTRAS)
-	$(GENISOIMAGE) -no-cache-inodes -D -l -probe -V "Newcoin-Qt" -no-pad -r -apple -o $@ dist
-
-$(APP_DIST_DIR)/.background/background.png:
-	$(MKDIR_P) $(@D)
-	$(INSTALL) $(top_srcdir)/contrib/macdeploy/background.png $@
-$(APP_DIST_DIR)/.DS_Store:
-	$(INSTALL) $(top_srcdir)/contrib/macdeploy/DS_Store $@
-
-$(APP_DIST_DIR)/$(OSX_APP)/Contents/MacOS/Newcoin-Qt: $(OSX_APP_BUILT) $(OSX_PACKAGING)
-	INSTALLNAMETOOL=$(INSTALLNAMETOOL)  OTOOL=$(OTOOL) STRIP=$(STRIP) $(OSX_DEPLOY_SCRIPT) $(OSX_APP) -translations-dir=$(QT_TRANSLATION_DIR) -add-qt-tr $(OSX_QT_TRANSLATIONS) -verbose 2
-
-deploydir: $(APP_DIST_EXTRAS)
+LIBNEWCOIN_CONSENSUS=
 endif
 
-if TARGET_DARWIN
-appbundle: $(OSX_APP_BUILT)
-deploy: $(OSX_DMG)
+bin_PROGRAMS =
+TESTS =
+
+if BUILD_NEWCOIND
+  bin_PROGRAMS += newcoind
 endif
+
+if BUILD_NEWCOIN_UTILS
+  bin_PROGRAMS += newcoin-cli newcoin-tx
+endif
+
+.PHONY: FORCE
+# newcoin core #
+NEWCOIN_CORE_H = \
+  addrman.h \
+  alert.h \
+  allocators.h \
+  amount.h \
+  base58.h \
+  bloom.h \
+  chain.h \
+  chainparams.h \
+  chainparamsbase.h \
+  chainparamsseeds.h \
+  checkpoints.h \
+  checkqueue.h \
+  clientversion.h \
+  coincontrol.h \
+  coins.h \
+  compat.h \
+  compressor.h \
+  primitives/block.h \
+  primitives/transaction.h \
+  core_io.h \
+  crypter.h \
+  db.h \
+  eccryptoverify.h \
+  ecwrapper.h \
+  hash.h \
+  init.h \
+  key.h \
+  keystore.h \
+  leveldbwrapper.h \
+  limitedmap.h \
+  main.h \
+  merkleblock.h \
+  miner.h \
+  mruset.h \
+  netbase.h \
+  net.h \
+  noui.h \
+  pow.h \
+  protocol.h \
+  pubkey.h \
+  random.h \
+  rpcclient.h \
+  rpcprotocol.h \
+  rpcserver.h \
+  script/interpreter.h \
+  script/script.h \
+  script/sigcache.h \
+  script/sign.h \
+  script/standard.h \
+  script/script_error.h \
+  serialize.h \
+  streams.h \
+  sync.h \
+  threadsafety.h \
+  timedata.h \
+  tinyformat.h \
+  txdb.h \
+  txmempool.h \
+  ui_interface.h \
+  uint256.h \
+  undo.h \
+  util.h \
+  utilstrencodings.h \
+  utilmoneystr.h \
+  utiltime.h \
+  version.h \
+  wallet.h \
+  wallet_ismine.h \
+  walletdb.h \
+  compat/sanity.h
+
+JSON_H = \
+  json/json_spirit.h \
+  json/json_spirit_error_position.h \
+  json/json_spirit_reader.h \
+  json/json_spirit_reader_template.h \
+  json/json_spirit_stream_reader.h \
+  json/json_spirit_utils.h \
+  json/json_spirit_value.h \
+  json/json_spirit_writer.h \
+  json/json_spirit_writer_template.h
+
+obj/build.h: FORCE
+	@$(MKDIR_P) $(builddir)/obj
+	@$(top_srcdir)/share/genbuild.sh $(abs_top_builddir)/src/obj/build.h \
+	  $(abs_top_srcdir)
+libnewcoin_util_a-clientversion.$(OBJEXT): obj/build.h
+
+# server: shared between newcoind and newcoin-qt
+libnewcoin_server_a_CPPFLAGS = $(NEWCOIN_INCLUDES) $(MINIUPNPC_CPPFLAGS)
+libnewcoin_server_a_SOURCES = \
+  addrman.cpp \
+  alert.cpp \
+  bloom.cpp \
+  chain.cpp \
+  checkpoints.cpp \
+  init.cpp \
+  leveldbwrapper.cpp \
+  main.cpp \
+  merkleblock.cpp \
+  miner.cpp \
+  net.cpp \
+  noui.cpp \
+  pow.cpp \
+  rest.cpp \
+  rpcblockchain.cpp \
+  rpcmining.cpp \
+  rpcmisc.cpp \
+  rpcnet.cpp \
+  rpcrawtransaction.cpp \
+  rpcserver.cpp \
+  script/sigcache.cpp \
+  timedata.cpp \
+  txdb.cpp \
+  txmempool.cpp \
+  $(JSON_H) \
+  $(NEWCOIN_CORE_H)
+
+# wallet: shared between newcoind and newcoin-qt, but only linked
+# when wallet enabled
+libnewcoin_wallet_a_CPPFLAGS = $(NEWCOIN_INCLUDES)
+libnewcoin_wallet_a_SOURCES = \
+  db.cpp \
+  crypter.cpp \
+  rpcdump.cpp \
+  rpcwallet.cpp \
+  wallet.cpp \
+  wallet_ismine.cpp \
+  walletdb.cpp \
+  $(NEWCOIN_CORE_H)
+
+# crypto primitives library
+crypto_libnewcoin_crypto_a_CPPFLAGS = $(NEWCOIN_CONFIG_INCLUDES)
+crypto_libnewcoin_crypto_a_SOURCES = \
+  crypto/sha1.cpp \
+  crypto/sha256.cpp \
+  crypto/sha512.cpp \
+  crypto/hmac_sha256.cpp \
+  crypto/rfc6979_hmac_sha256.cpp \
+  crypto/hmac_sha512.cpp \
+  crypto/ripemd160.cpp \
+  crypto/common.h \
+  crypto/sha256.h \
+  crypto/sha512.h \
+  crypto/hmac_sha256.h \
+  crypto/rfc6979_hmac_sha256.h \
+  crypto/hmac_sha512.h \
+  crypto/sha1.h \
+  crypto/ripemd160.h
+
+# univalue JSON library
+univalue_libnewcoin_univalue_a_SOURCES = \
+  univalue/univalue.cpp \
+  univalue/univalue_read.cpp \
+  univalue/univalue_write.cpp \
+  univalue/univalue_escapes.h \
+  univalue/univalue.h
+
+# common: shared between newcoind, and newcoin-qt and non-server tools
+libnewcoin_common_a_CPPFLAGS = $(NEWCOIN_INCLUDES)
+libnewcoin_common_a_SOURCES = \
+  allocators.cpp \
+  amount.cpp \
+  base58.cpp \
+  chainparams.cpp \
+  coins.cpp \
+  compressor.cpp \
+  primitives/block.cpp \
+  primitives/transaction.cpp \
+  core_read.cpp \
+  core_write.cpp \
+  eccryptoverify.cpp \
+  ecwrapper.cpp \
+  hash.cpp \
+  key.cpp \
+  keystore.cpp \
+  netbase.cpp \
+  protocol.cpp \
+  pubkey.cpp \
+  script/interpreter.cpp \
+  script/script.cpp \
+  script/sign.cpp \
+  script/standard.cpp \
+  script/script_error.cpp \
+  $(NEWCOIN_CORE_H)
+
+# util: shared between all executables.
+# This library *must* be included to make sure that the glibc
+# backward-compatibility objects and their sanity checks are linked.
+libnewcoin_util_a_CPPFLAGS = $(NEWCOIN_INCLUDES)
+libnewcoin_util_a_SOURCES = \
+  compat/strnlen.cpp \
+  compat/glibc_sanity.cpp \
+  compat/glibcxx_sanity.cpp \
+  chainparamsbase.cpp \
+  clientversion.cpp \
+  random.cpp \
+  rpcprotocol.cpp \
+  sync.cpp \
+  uint256.cpp \
+  util.cpp \
+  utilstrencodings.cpp \
+  utilmoneystr.cpp \
+  utiltime.cpp \
+  $(NEWCOIN_CORE_H)
+
+if GLIBC_BACK_COMPAT
+libnewcoin_util_a_SOURCES += compat/glibc_compat.cpp
+libnewcoin_util_a_SOURCES += compat/glibcxx_compat.cpp
+endif
+
+# cli: shared between newcoin-cli and newcoin-qt
+libnewcoin_cli_a_CPPFLAGS = $(NEWCOIN_INCLUDES)
+libnewcoin_cli_a_SOURCES = \
+  rpcclient.cpp \
+  $(NEWCOIN_CORE_H)
+
+nodist_libnewcoin_util_a_SOURCES = $(srcdir)/obj/build.h
+#
+
+# newcoind binary #
+newcoind_LDADD = \
+  $(LIBNEWCOIN_SERVER) \
+  $(LIBNEWCOIN_COMMON) \
+  $(LIBNEWCOIN_UNIVALUE) \
+  $(LIBNEWCOIN_UTIL) \
+  $(LIBNEWCOIN_CRYPTO) \
+  $(LIBLEVELDB) \
+  $(LIBMEMENV) \
+  $(LIBSECP256K1)
+
+if ENABLE_WALLET
+newcoind_LDADD += libnewcoin_wallet.a
+endif
+newcoind_SOURCES = newcoind.cpp
+#
+
 if TARGET_WINDOWS
-deploy: $(NEWCOIN_WIN_INSTALLER)
+newcoind_SOURCES += newcoind-res.rc
 endif
 
-$(NEWCOIN_QT_BIN): FORCE
-	$(MAKE) -C src qt/$(@F)
+newcoind_LDADD += $(BOOST_LIBS) $(BDB_LIBS) $(SSL_LIBS) $(CRYPTO_LIBS) $(MINIUPNPC_LIBS)
+newcoind_CPPFLAGS = $(NEWCOIN_INCLUDES)
+newcoind_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS)
 
-$(NEWCOIND_BIN): FORCE
-	$(MAKE) -C src $(@F)
+# newcoin-cli binary #
+newcoin_cli_LDADD = \
+  $(LIBNEWCOIN_CLI) \
+  $(LIBNEWCOIN_UTIL) \
+  $(BOOST_LIBS) \
+  $(SSL_LIBS) \
+  $(CRYPTO_LIBS)
 
-$(NEWCOIN_CLI_BIN): FORCE
-	$(MAKE) -C src $(@F)
+newcoin_cli_SOURCES = \
+  newcoin-cli.cpp
 
-if USE_LCOV
+newcoin_cli_CPPFLAGS = $(NEWCOIN_INCLUDES)
+#
 
-baseline.info:
-	$(LCOV) -c -i -d $(abs_builddir)/src -o $@
+# newcoin-tx binary #
+newcoin_tx_LDADD = \
+  $(LIBNEWCOIN_UNIVALUE) \
+  $(LIBNEWCOIN_COMMON) \
+  $(LIBNEWCOIN_UTIL) \
+  $(LIBNEWCOIN_CRYPTO) \
+  $(LIBSECP256K1) \
+  $(BOOST_LIBS) \
+  $(CRYPTO_LIBS)
 
-baseline_filtered.info: baseline.info
-	$(LCOV) -r $< "/usr/include/*" -o $@
+newcoin_tx_SOURCES = newcoin-tx.cpp
+newcoin_tx_CPPFLAGS = $(NEWCOIN_INCLUDES)
+#
+newcoin_tx_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS)
 
-leveldb_baseline.info: baseline_filtered.info
-	$(LCOV) -c -i -d $(abs_builddir)/src/leveldb -b $(abs_builddir)/src/leveldb -o $@
+if TARGET_WINDOWS
+newcoin_cli_SOURCES += newcoin-cli-res.rc
+endif
+newcoin_cli_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS)
 
-leveldb_baseline_filtered.info: leveldb_baseline.info
-	$(LCOV) -r $< "/usr/include/*" -o $@
+if BUILD_NEWCOIN_LIBS
+include_HEADERS = script/newcoinconsensus.h
+libnewcoinconsensus_la_SOURCES = \
+  primitives/transaction.cpp \
+  crypto/hmac_sha512.cpp \
+  crypto/sha1.cpp \
+  crypto/sha256.cpp \
+  crypto/sha512.cpp \
+  crypto/ripemd160.cpp \
+  eccryptoverify.cpp \
+  ecwrapper.cpp \
+  hash.cpp \
+  pubkey.cpp \
+  script/script.cpp \
+  script/interpreter.cpp \
+  script/newcoinconsensus.cpp \
+  uint256.cpp \
+  utilstrencodings.cpp
 
-baseline_filtered_combined.info: leveldb_baseline_filtered.info baseline_filtered.info
-	$(LCOV) -a leveldb_baseline_filtered.info -a baseline_filtered.info -o $@
-
-test_newcoin.info: baseline_filtered_combined.info
-	$(MAKE) -C src/ check
-	$(LCOV) -c -d $(abs_builddir)/src -t test_newcoin -o $@
-	$(LCOV) -z -d $(abs_builddir)/src
-	$(LCOV) -z -d $(abs_builddir)/src/leveldb
-
-test_newcoin_filtered.info: test_newcoin.info
-	$(LCOV) -r $< "/usr/include/*" -o $@
-
-block_test.info: test_newcoin_filtered.info
-	$(MKDIR_P) qa/tmp
-	-@TIMEOUT=15 qa/pull-tester/run-newcoind-for-test.sh $(JAVA) -jar $(JAVA_COMPARISON_TOOL) qa/tmp/compTool 0
-	$(LCOV) -c -d $(abs_builddir)/src --t NewcoinJBlockTest -o $@
-	$(LCOV) -z -d $(abs_builddir)/src
-	$(LCOV) -z -d $(abs_builddir)/src/leveldb
-
-block_test_filtered.info: block_test.info
-	$(LCOV) -r $< "/usr/include/*" -o $@
-
-test_newcoin_coverage.info: baseline_filtered_combined.info test_newcoin_filtered.info
-	$(LCOV) -a baseline_filtered.info -a leveldb_baseline_filtered.info -a test_newcoin_filtered.info -o $@
-
-total_coverage.info:  baseline_filtered_combined.info test_newcoin_filtered.info block_test_filtered.info
-	$(LCOV) -a baseline_filtered.info -a leveldb_baseline_filtered.info -a test_newcoin_filtered.info -a block_test_filtered.info -o $@ | $(GREP) "\%" | $(AWK) '{ print substr($$3,2,50) "/" $$5 }' > coverage_percent.txt
-
-test_newcoin.coverage/.dirstamp:  test_newcoin_coverage.info
-	$(GENHTML) -s $< -o $(@D)
-	@touch $@
-
-total.coverage/.dirstamp: total_coverage.info
-	$(GENHTML) -s $< -o $(@D)
-	@touch $@
-
-cov: test_newcoin.coverage/.dirstamp total.coverage/.dirstamp
-
+if GLIBC_BACK_COMPAT
+  libnewcoinconsensus_la_SOURCES += compat/glibc_compat.cpp
+  libnewcoinconsensus_la_SOURCES += compat/glibcxx_compat.cpp
 endif
 
-if USE_COMPARISON_TOOL
-check-local:
-	$(MKDIR_P) qa/tmp
-	@qa/pull-tester/run-newcoind-for-test.sh $(JAVA) -jar $(JAVA_COMPARISON_TOOL) qa/tmp/compTool $(COMPARISON_TOOL_REORG_TESTS) 2>&1
+libnewcoinconsensus_la_LDFLAGS = -no-undefined $(RELDFLAGS)
+libnewcoinconsensus_la_LIBADD = $(CRYPTO_LIBS)
+libnewcoinconsensus_la_CPPFLAGS = $(CRYPTO_CFLAGS) -I$(builddir)/obj -DBUILD_NEWCOIN_INTERNAL
+if USE_LIBSECP256K1
+libnewcoinconsensus_la_LIBADD += secp256k1/libsecp256k1.la
+endif
 endif
 
-EXTRA_DIST = $(top_srcdir)/share/genbuild.sh qa/pull-tester/rpc-tests.sh qa/pull-tester/run-newcoin-cli qa/rpc-tests $(DIST_DOCS) $(WINDOWS_PACKAGING) $(OSX_PACKAGING)
+CLEANFILES = leveldb/libleveldb.a leveldb/libmemenv.a *.gcda *.gcno
 
-CLEANFILES = $(OSX_DMG) $(NEWCOIN_WIN_INSTALLER)
+DISTCLEANFILES = obj/build.h
 
-.INTERMEDIATE: $(COVERAGE_INFO)
+EXTRA_DIST = leveldb
 
 clean-local:
-	rm -rf test_newcoin.coverage/ total.coverage/ $(OSX_APP)
+	-$(MAKE) -C leveldb clean
+	-$(MAKE) -C secp256k1 clean
+	rm -f leveldb/*/*.gcno leveldb/helpers/memenv/*.gcno
+	-rm -f config.h
+
+.rc.o:
+	@test -f $(WINDRES)
+	$(AM_V_GEN) $(WINDRES) -DWINDRES_PREPROC -i $< -o $@
+
+.mm.o:
+	$(AM_V_CXX) $(OBJCXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
+	  $(CPPFLAGS) $(AM_CXXFLAGS) $(QT_INCLUDES) $(CXXFLAGS)  -c -o $@ $<
+
+%.pb.cc %.pb.h: %.proto
+	@test -f $(PROTOC)
+	$(AM_V_GEN) $(PROTOC) --cpp_out=$(@D) --proto_path=$(abspath $(<D) $<)
+
+if ENABLE_TESTS
+include Makefile.test.include
+endif
+
+if ENABLE_QT
+include Makefile.qt.include
+endif
+
+if ENABLE_QT_TESTS
+include Makefile.qttest.include
+endif
