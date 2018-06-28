@@ -1,4 +1,4 @@
-The following is a list of assets used in the bitcoin source and their proper attribution.
+The following is a list of assets used in the newcoin source and their proper attribution.
 
 [Wladimir van der Laan](https://github.com/laanwj)
 -----------------------
@@ -47,7 +47,7 @@ md2k7
 * Designer: md2k7
 * License: You are free to do with these icons as you wish, including selling, copying, modifying etc.
 * License: MIT
-* Site: [https://bitcointalk.org/index.php?topic=15276.0](https://bitcointalk.org/index.php?topic=15276.0)
+* Site: [https://newcointalk.org/index.php?topic=15276.0](https://newcointalk.org/index.php?topic=15276.0)
 
 ### Assets Used
 	src/qt/res/icons/transaction*.png
@@ -93,11 +93,11 @@ Jonas Schnelli
 -----------------------
 
 ### Info
-* Designer: Jonas Schnelli (based on the original bitcoin logo from Bitboy)
+* Designer: Jonas Schnelli (based on the original newcoin logo from Bitboy)
 * License: MIT
 
 ### Assets Used
-	src/qt/res/icons/bitcoin.icns, src/qt/res/src/bitcoin.svg,
-	src/qt/res/src/bitcoin.ico, src/qt/res/src/bitcoin.png,
-	src/qt/res/src/bitcoin_testnet.png, docs/bitcoin_logo_doxygen.png,
+	src/qt/res/icons/newcoin.icns, src/qt/res/src/newcoin.svg,
+	src/qt/res/src/newcoin.ico, src/qt/res/src/newcoin.png,
+	src/qt/res/src/newcoin_testnet.png, docs/newcoin_logo_doxygen.png,
 	src/qt/res/images/splash.png, src/qt/res/images/splash_testnet.png
