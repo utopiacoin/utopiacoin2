@@ -1,0 +1,6 @@
+usr/local/bin/newcoin-qt usr/bin
+share/pixmaps/newcoin32.xpm usr/share/pixmaps
+share/pixmaps/newcoin16.xpm usr/share/pixmaps
+share/pixmaps/newcoin128.png usr/share/pixmaps
+debian/newcoin-qt.desktop usr/share/applications
+debian/newcoin-qt.protocol usr/share/kde4/services/

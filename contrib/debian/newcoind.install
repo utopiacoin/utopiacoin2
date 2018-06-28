@@ -1,0 +1,2 @@
+usr/local/bin/newcoind usr/bin
+usr/local/bin/newcoin-cli usr/bin
