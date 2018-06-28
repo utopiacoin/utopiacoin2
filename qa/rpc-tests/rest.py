@@ -7,7 +7,7 @@
 # Test REST interface
 #
 
-from test_framework import BitcoinTestFramework
+from test_framework import NewcoinTestFramework
 from util import *
 import json
 
@@ -30,7 +30,7 @@ def http_get_call(host, port, path, response_object = 0):
     return conn.getresponse().read()
 
 
-class RESTTest (BitcoinTestFramework):
+class RESTTest (NewcoinTestFramework):
     FORMAT_SEPARATOR = "."
     
     def run_test(self):

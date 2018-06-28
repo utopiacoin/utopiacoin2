@@ -7,13 +7,13 @@
 # Test the BIP66 changeover logic
 #
 
-from test_framework import BitcoinTestFramework
-from bitcoinrpc.authproxy import AuthServiceProxy, JSONRPCException
+from test_framework import NewcoinTestFramework
+from newcoinrpc.authproxy import AuthServiceProxy, JSONRPCException
 from util import *
 import os
 import shutil
 
-class BIP66Test(BitcoinTestFramework):
+class BIP66Test(NewcoinTestFramework):
 
     def setup_network(self):
         self.nodes = []
